@@ -33,22 +33,37 @@ def login(server, user, pwd):
     return server
 
 
-def polling(server, mailbox):
-    """Wait for new message."""
-    unprocessed = download_emails(mailbox)
+def download_emails(server):
+    """Get the latest e-mails of interest.
+
+    Use SORT command to get messages that does not contain the header
+    "In-Reply-To", that is, they are not thread. Also discard first message,
+    usually containing "from portal". Sort them by date so we start with the
+    older one.
+    """
+    print("Searching unprocessed messages")
+    return server.uid(
+        'SORT',
+        '(DATE)',
+        'UTF-8',
+        'NOT HEADER In-Reply-To "" NOT SUBJECT "from portal"')
+
+
+def polling(server):
+    """Wait for new message and return the ID of the message to process."""
+    unprocessed = download_emails(server)
     while unprocessed is None:
         print("Entering into IDLE")
         server.idle()
-        unprocessed = download_emails(mailbox)
+        unprocessed = download_emails(server)
 
     return unprocessed
 
 
-def magic(mailbox, email, mailbox_name):
+def magic(mailbox, email_id, mailbox_name):
     """Do the magic."""
-    msgId = email[0]
-    email = email[1]
-    print("Processing " + str(msgId) + " - " + email.get('Subject'))
+    print("Processing " + str(email_id) + " - " + email.get('Subject'))
+    email = mailbox[email_id]
 
     # Get the case number from the subject
     case_number = re.search('Case Number ([0-9]{8})',
@@ -90,24 +105,9 @@ def magic(mailbox, email, mailbox_name):
     email.add_header('In-Reply-To',
                      mailbox.get_message(parent).get('Message-ID'))
 
-    mailbox.move(msgId, mailbox_name + "/BackUp")  # Backup original message
+    mailbox.move(email_id, mailbox_name + "/BackUp")  # Backup original message
     mailbox.add(email)
 
-
-def download_emails(mailbox):
-    """Get the latest e-mails of interest."""
-    print("Getting messages")
-    ids = mailbox.search('NOT HEADER In-Reply-To "" NOT SUBJECT "from portal"')
-    emails = []
-    count = 0
-    for msgId in ids:
-        print("\t%d of %d (%f%%)" % (count, len(ids), count * 100 / len(ids)))
-        count = count + 1
-        e = mailbox.get_message(msgId)
-        emails.append((msgId, e))
-
-    print("Sorting messages")
-    return sorted(emails, key=lambda e: mktime(parsedate(e[1].get('Date'))))
 
 if __name__ == "__main__":
     server = raw_input('IMAP Server: ')
@@ -118,13 +118,14 @@ if __name__ == "__main__":
     # Go to mailbox
     mailbox_name = raw_input('Mailbox name: ')
     mailbox = ImapMailbox.ImapMailbox((server, mailbox_name), create=False)
-    emails = polling(server, mailbox)
+    emails = polling(server)
+    print(emails)
 
-    print("Doing magic")
-    count = 0
-    for e in emails:
-        print("\t%d/%d %f%%" % (count, len(emails), count * 100 / len(emails)))
-        count = count + 1
-        magic(mailbox, e, boxname)
+    # print("Doing magic")
+    # count = 0
+    # for e in emails:
+    #     print("\t%d/%d %f%%" % (count, len(emails), count * 100 / len(emails)))
+    #     count = count + 1
+    #     magic(mailbox, e, boxname)
 
     mailbox.close()
