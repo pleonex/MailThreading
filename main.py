@@ -35,33 +35,33 @@ def login(server, user, pwd):
 
 def polling(server, mailbox):
     """Wait for new message."""
-    toprocess = getmessages(mailbox)
-    while toprocess is None:
+    unprocessed = download_emails(mailbox)
+    while unprocessed is None:
         print("Entering into IDLE")
         server.idle()
-        toprocess = getmessages(mailbox)
+        unprocessed = download_emails(mailbox)
 
-    return toprocess
+    return unprocessed
 
 
-def magic(mailbox, email, mailname):
+def magic(mailbox, email, mailbox_name):
     """Do the magic."""
     msgId = email[0]
     email = email[1]
     print("Processing " + str(msgId) + " - " + email.get('Subject'))
 
     # Get the case number from the subject
-    casenumber = re.search('Case Number ([0-9]{8})',
-                           email.get('Subject'))
-    if casenumber is None:
+    case_number = re.search('Case Number ([0-9]{8})',
+                            email.get('Subject'))
+    if case_number is None:
         print("\tInvalid message")
         return
     else:
-        casenumber = casenumber.group(1)
+        case_number = case_number.group(1)
 
     # Search the root message
     parent = mailbox.search(
-        'SUBJECT "Case Number %s" HEADER In-Reply-To ""' % casenumber)
+        'SUBJECT "Case Number %s" HEADER In-Reply-To ""' % case_number)
     sorted(parent, key=lambda e: mktime(parsedate(mailbox.get(e).get('Date'))))
 
     my_date = mktime(parsedate(email.get('Date')))
@@ -70,7 +70,7 @@ def magic(mailbox, email, mailname):
         parent_date = mktime(parsedate(mailbox.get(parent[0]).get('Date')))
     if len(parent) == 0 or my_date < parent_date:
         parent = mailbox.search(
-            'SUBJECT "New Case %s from portal"' % casenumber)
+            'SUBJECT "New Case %s from portal"' % case_number)
 
         if len(parent) == 0:
             print("\tCannot find parent")
@@ -90,11 +90,11 @@ def magic(mailbox, email, mailname):
     email.add_header('In-Reply-To',
                      mailbox.get_message(parent).get('Message-ID'))
 
-    mailbox.move(msgId, mailname + "/BackUp")  # Move original message to trash
+    mailbox.move(msgId, mailbox_name + "/BackUp")  # Backup original message
     mailbox.add(email)
 
 
-def getmessages(mailbox):
+def download_emails(mailbox):
     """Get the latest e-mails of interest."""
     print("Getting messages")
     ids = mailbox.search('NOT HEADER In-Reply-To "" NOT SUBJECT "from portal"')
@@ -116,8 +116,8 @@ if __name__ == "__main__":
     server = login(server, email, pwd)
 
     # Go to mailbox
-    boxname = raw_input('Mailbox name: ')
-    mailbox = ImapMailbox.ImapMailbox((server, boxname), create=False)
+    mailbox_name = raw_input('Mailbox name: ')
+    mailbox = ImapMailbox.ImapMailbox((server, mailbox_name), create=False)
     emails = polling(server, mailbox)
 
     print("Doing magic")
