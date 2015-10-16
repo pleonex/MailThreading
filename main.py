@@ -33,20 +33,21 @@ def login(server, user, pwd):
     return server
 
 
-def download_emails(server):
+def download_emails(mailbox):
     """Get the latest e-mails of interest.
 
-    Use SORT command to get messages that does not contain the header
+    Use SEARCH command to get messages that does not contain the header
     "In-Reply-To", that is, they are not thread. Also discard first message,
     usually containing "from portal". Sort them by date so we start with the
     older one.
     """
     print("Searching unprocessed messages")
-    return server.uid(
-        'SORT',
-        '(DATE)',
-        'UTF-8',
+    emails = mailbox.search(
         'NOT HEADER In-Reply-To "" NOT SUBJECT "from portal"')
+    sorted(emails,
+           key=lambda e: mktime(parsedate(
+               mailbox.get_fields(e, 'Date').get('Date'))))
+    return emails
 
 
 def polling(server):
@@ -118,7 +119,7 @@ if __name__ == "__main__":
     # Go to mailbox
     mailbox_name = raw_input('Mailbox name: ')
     mailbox = ImapMailbox.ImapMailbox((server, mailbox_name), create=False)
-    emails = polling(server)
+    emails = polling(mailbox)
     print(emails)
 
     # print("Doing magic")
