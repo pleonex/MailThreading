@@ -119,14 +119,15 @@ if __name__ == "__main__":
     # Go to mailbox
     mailbox_name = raw_input('Mailbox name: ')
     mailbox = ImapMailbox.ImapMailbox((server, mailbox_name), create=False)
-    emails = polling(mailbox)
-    print(emails)
 
-    # print("Doing magic")
-    # count = 0
-    # for e in emails:
-    #     print("\t%d/%d %f%%" % (count, len(emails), count * 100 / len(emails)))
-    #     count = count + 1
-    #     magic(mailbox, e, boxname)
+    # Enter into the infinite loop to check email and process it
+    while True:
+        emails = polling(mailbox)
+
+        count = 0
+        for e in emails:
+            print("\t%d/%d" % (count, len(emails)))
+            magic(mailbox, e, boxname)
+            count += 1
 
     mailbox.close()
