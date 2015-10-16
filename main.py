@@ -65,7 +65,7 @@ def polling(server):
     unprocessed = download_emails(server)
     while unprocessed is None:
         print("Entering into IDLE")
-        server.idle()
+        server.idle(timeout=29*60)
         unprocessed = download_emails(server)
 
     return unprocessed
@@ -111,6 +111,10 @@ def search_parent_email(mailbox, email):
 def thread_email(mailbox, email_id, mailbox_name):
     """Thread an email."""
     email = mailbox[email_id]
+    if email.get('Subject') is None:
+        print('Invalid subject')
+        return False
+
     print("Processing " + str(email_id) + ": " + email.get('Subject'))
 
     # Search the parent email, not found do nothing, maybe it's the first msg.
