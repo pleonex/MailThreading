@@ -33,6 +33,18 @@ def login(server, user, pwd):
     return server
 
 
+def get_email_date(email):
+    """Get the date of an email in float notation."""
+    return mktime(parsedate(email.get('Date')))
+
+
+def sort_email_by_date(mailbox, emails):
+    """Sort a list of UID emails by their dates."""
+    # Get only an email object with the Date header.
+    sorted(emails, key=lambda e: get_email_date(mailbox.get_fields(e, 'Date')))
+    emails.reverse()
+
+
 def download_emails(mailbox):
     """Get the latest e-mails of interest.
 
@@ -44,9 +56,7 @@ def download_emails(mailbox):
     print("Searching unprocessed messages")
     emails = mailbox.search(
         'NOT HEADER In-Reply-To "" NOT SUBJECT "from portal"')
-    sorted(emails,
-           key=lambda e: mktime(parsedate(
-               mailbox.get_fields(e, 'Date').get('Date'))))
+    sort_email_by_date(mailbox, emails)
     return emails
 
 
@@ -61,53 +71,71 @@ def polling(server):
     return unprocessed
 
 
-def magic(mailbox, email_id, mailbox_name):
-    """Do the magic."""
-    print("Processing " + str(email_id) + " - " + email.get('Subject'))
-    email = mailbox[email_id]
-
-    # Get the case number from the subject
-    case_number = re.search('Case Number ([0-9]{8})',
-                            email.get('Subject'))
+def search_parent_email(mailbox, email):
+    """Search and return the ID of the parent email."""
+    # Try to get the case number from the subject.
+    case_number = re.search('Case Number ([0-9]{8})', email.get('Subject'))
     if case_number is None:
         print("\tInvalid message")
-        return
+        return None
     else:
         case_number = case_number.group(1)
 
-    # Search the root message
+    # Search all the emails with the same case number already in threads.
     parent = mailbox.search(
         'SUBJECT "Case Number %s" HEADER In-Reply-To ""' % case_number)
-    sorted(parent, key=lambda e: mktime(parsedate(mailbox.get(e).get('Date'))))
+    sort_email_by_date(mailbox, parent)
 
-    my_date = mktime(parsedate(email.get('Date')))
+    # Get the email date to compare with the current parent.
+    email_date = get_email_date(email)
     parent_date = 0
     if len(parent) > 0:
-        parent_date = mktime(parsedate(mailbox.get(parent[0]).get('Date')))
-    if len(parent) == 0 or my_date < parent_date:
+        # Get only an email object with the Date header.
+        parent_date = get_email_date(mailbox.get_fields(parent[0], 'Date'))
+
+    # If we haven't found any parent or our parent is before our message,
+    # search for the first, New Case, email.
+    if len(parent) == 0 or parent_date > email_date:
         parent = mailbox.search(
             'SUBJECT "New Case %s from portal"' % case_number)
 
-        if len(parent) == 0:
-            print("\tCannot find parent")
-            return
+        if len(parent) != 1:
+            print("\tCannot find parent: " + str(len(parent)))
+            return None
 
+    # Get the first parent
     parent = parent[0]
-    print("\tParent: " + mailbox.get(parent).get('Subject'))
+    return parent
 
+
+def thread_email(mailbox, email_id, mailbox_name):
+    """Thread an email."""
+    email = mailbox[email_id]
+    print("Processing " + str(email_id) + ": " + email.get('Subject'))
+
+    # Search the parent email, not found do nothing, maybe it's the first msg.
+    parent = search_parent_email(mailbox, email)
+    if parent is None:
+        return False
+
+    # Add the In-Reply-To header, to create the threading behavior.
+    parent_msgid = mailbox.get_fields(parent, 'Message-ID').get('Message-ID')
+    email.add_header('In-Reply-To', parent_msgid)
+
+    # In Gmail and other IMAP servers, we need to change the date if the
+    # message are so similars. Just increment the minutes by one.
     def replace_date(matches):
         minutes = int(matches.group(2)) + 1
         return matches.group(1) + ':' + str(minutes) + ':' + matches.group(3)
 
-    date = email.get('Date')
-    new_date = re.sub('(\d+):(\d+):(\d+)', replace_date, date)
+    new_date = re.sub('(\d+):(\d+):(\d+)', replace_date, email.get('Date'))
     email.replace_header('Date', new_date)
 
-    email.add_header('In-Reply-To',
-                     mailbox.get_message(parent).get('Message-ID'))
-
-    mailbox.move(email_id, mailbox_name + "/BackUp")  # Backup original message
+    # Finally, move the original email to the BackUp folder and add our own.
+    mailbox.move(email_id, mailbox_name + "/BackUp")
     mailbox.add(email)
+
+    return True
 
 
 if __name__ == "__main__":
@@ -121,13 +149,17 @@ if __name__ == "__main__":
     mailbox = ImapMailbox.ImapMailbox((server, mailbox_name), create=False)
 
     # Enter into the infinite loop to check email and process it
-    while True:
+    exit = False
+    while not exit:
         emails = polling(mailbox)
 
         count = 0
         for e in emails:
-            print("\t%d/%d" % (count, len(emails)))
-            magic(mailbox, e, boxname)
             count += 1
+            print("\t%d of %d" % (count, len(emails)))
+            if thread_email(mailbox, e, mailbox_name):
+                # exit = True
+                # break
+                pass
 
     mailbox.close()
