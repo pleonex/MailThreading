@@ -1,7 +1,7 @@
 #!/bin/python
 # -*- coding: utf-8 -*-
 ###############################################################################
-#  Delay your email notification some hours - V1.0                            #
+#  Thread your SF emails - V1.0                                               #
 #  Copyright 2015 Benito Palacios (aka pleonex)                               #
 #                                                                             #
 #  Licensed under the Apache License, Version 2.0 (the "License");            #
@@ -31,6 +31,11 @@ def login(server, user, pwd):
     """Create a connection to the server and log-in."""
     server = ImapServer.ImapServer(server, user, pwd)
     return server
+
+
+def get_mailbox(server, mailbox_name):
+    """Get a mailbox from the server with the same name."""
+    return ImapMailbox.ImapMailbox((server, mailbox_name), create=False)
 
 
 def get_email_date(email):
@@ -150,7 +155,7 @@ if __name__ == "__main__":
 
     # Go to mailbox
     mailbox_name = raw_input('Mailbox name: ')
-    mailbox = ImapMailbox.ImapMailbox((server, mailbox_name), create=False)
+    mailbox = get_mailbox(server, mailbox_name)
 
     # Enter into the infinite loop to check email and process it
     exit = False
