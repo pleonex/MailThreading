@@ -23,8 +23,17 @@ import re
 from getpass import getpass
 from email.utils import parsedate
 from time import mktime
+from os import getenv
 
 CASE_REGEX = re.compile('Case Number ([0-9]{8})')
+
+
+def get_input(var_name, input_text):
+    """Try to get a variable from env or ask to the user."""
+    value = getenv(var_name)
+    if value is None:
+        value = raw_input(input_text)
+    return value
 
 
 def login(server, user, pwd):
@@ -148,13 +157,18 @@ def thread_email(mailbox, email_id, mailbox_name):
 
 
 if __name__ == "__main__":
-    server = raw_input('IMAP Server: ')
-    email = raw_input('E-mail: ')
-    pwd = getpass()
+    # Try to load the config from env vars first.
+    server = get_input("MT_SERVER", "IMAP Server: ")
+    email = get_input("MT_EMAIL", "E-mail: ")
+    pwd = getenv("MT_PWD")
+    if pwd is None:
+        pwd = getpass()
+
+    # Log into the server.
     server = login(server, email, pwd)
 
     # Go to mailbox
-    mailbox_name = raw_input('Mailbox name: ')
+    mailbox_name = get_input('MT_MAILBOX', 'Mailbox name: ')
     mailbox = get_mailbox(server, mailbox_name)
 
     # Enter into the infinite loop to check email and process it
